@@ -15,7 +15,7 @@ blueprint = flask.Blueprint('main_api', __name__,
 def create_user():
     '''Confirms registration by token'''
     if not request.json:
-        return make_response(jsonify({'error': 'Empty reuqest', 'status': 'error'}), 400)
+        return make_response(jsonify({'error': 'Empty request', 'status': 'error'}), 400)
     
     elif not all(key in request.json for key in
                  ['hashed_email', 'password', 'public_key', 'token', 'hashed_login']):
@@ -65,7 +65,7 @@ def create_user():
 def start_register():
     '''Initiates registration, sends a token'''
     if not request.json:
-        return make_response(jsonify({'error': 'Empty reuqest', 'status': 'error'}), 400)
+        return make_response(jsonify({'error': 'Empty request', 'status': 'error'}), 400)
     
     elif not all(key in request.json for key in
                  ['email']):
@@ -113,7 +113,7 @@ def start_register():
 def create_chat():
     '''Creates a chat with user {user}'''
     if not request.json:
-        return make_response(jsonify({'error': 'Empty reuqest', 'status': 'error'}), 400)
+        return make_response(jsonify({'error': 'Empty request', 'status': 'error'}), 400)
     
     elif not all(key in request.json for key in
                  ['login', 'password', 'user']):
@@ -168,7 +168,7 @@ def create_chat():
 def get_user_chats():
     '''Returns user chats'''
     if not request.json:
-        return make_response(jsonify({'error': 'Empty reuqest', 'status': 'error'}), 400)
+        return make_response(jsonify({'error': 'Empty request', 'status': 'error'}), 400)
     
     elif not all(key in request.json for key in
                  ['login', 'password']):
