@@ -10,8 +10,9 @@ email = sha512(mail.encode('utf-8')).hexdigest()
 
 
 def start_reg():
-    r = post('http://127.0.0.1:8080/api/initiate_registration', json={'email': mail})
-    print(r.json())  
+    r = post('http://127.0.0.1:8080/api/initiate_registration', json={'emai3l': mail})
+    print(r.json())
+    print(r.status_code)
 
 
 def complete_reg():
@@ -26,8 +27,9 @@ def complete_reg():
 def create_chat(login, password, username):
     r = post('http://127.0.0.1:8080/api/create_chat', json={'login': login, 'password': password, 'user': username})
     print(r.json())
+    print(r.status_code)
 
 
-create_chat('user1', '1234', '@2ebcfb8953f75278')
-#start_reg()
+#create_chat('user1', '1234', '@2ebcfb8953f75278')
+start_reg()
 #complete_reg()
