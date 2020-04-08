@@ -2,8 +2,8 @@ from requests import post, get
 from hashlib import sha512
 from random import randint
 
-login = 'user'
-password = '1234'
+login = 'user2'
+password = 'kljh4875LKJHf'
 email = 'bratezvova@mail.ru'
 
 
@@ -36,6 +36,6 @@ def get_user_data(login, password):
     print(r.status_code)
 
 #create_chat('user1', '1234', '@2ebcfb8953f75278')
-#start_reg()
-#complete_reg()
-get_user_data(login, password)
+start_reg()
+complete_reg()
+#get_user_data(login, password)

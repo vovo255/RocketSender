@@ -2,63 +2,14 @@ import flask
 import time
 import secrets
 from data import db_session
-from data.table import User, Token, UsedEmail, Chat
+from data.table import User, Token, UsedEmail, Chat, Message
 from flask import jsonify, request, make_response
 from tokens import generate, send, check_token
 from hashlib import sha512
+from check_password import check_password
 
 blueprint = flask.Blueprint('main_api', __name__, 
                             template_folder='api_templates')
-
-
-@blueprint.route('/api/complete_registration', methods=['POST'])
-def create_user():
-    '''Confirms registration by token'''
-    if not request.json:
-        return make_response(jsonify({'error': 'Empty request', 'status': 'error'}), 400)
-    
-    elif not all(key in request.json for key in
-                 ['email', 'password', 'public_key', 'token', 'login']):
-        print(request.json)
-        return make_response(jsonify({'error': 'Bad request', 'status': 'error'}), 400)
-
-    params = request.json
-    hashed_email = sha512(params['email'].encode('utf-8')).hexdigest()
-    session = db_session.create_session()
-
-    accept = check_token(params['token'], hashed_email)
-    if not accept:
-        return make_response(jsonify({'error': 'Token error', 'status': 'error'}), 400)
-
-    login = sha512(params['login'].encode('utf-8')).hexdigest()
-    password_salt = secrets.token_hex(16)
-    password = sha512(str(params['password'] + password_salt).encode('utf-8')).hexdigest()
-    public_key = params['public_key']
-
-    exist_login = session.query(User).filter(User.login==login).first()
-    if exist_login:
-        return make_response(jsonify({'error': 'Login already exist', 'status': 'error'}), 400)
-
-    username = "@" + secrets.token_hex(8)
-    username_exist = session.query(User).filter(User.username==username).first()
-    start_time = time.time()
-    while True:
-        if time.time() - start_time > 5:
-            return make_response(jsonify({'error': 'Username timeout', 'status': 'error'}), 400)
-        if username_exist:
-            username = "@" + secrets.token_hex(8)
-            username_exist = session.query(User).filter(User.username==username).first()
-        else:
-            break
-    
-    temp_user = User(login=login, username=username, password=password, password_salt=password_salt, public_key=public_key)
-    session.add(temp_user)
-    
-    temp_mail = UsedEmail(email=hashed_email)
-    session.add(temp_mail)
-    
-    session.commit()
-    return jsonify({'status': 'OK'})
 
 
 @blueprint.route('/api/initiate_registration', methods=['POST'])
@@ -75,7 +26,7 @@ def start_register():
     
     email = request.json['email']
     hashed_email = sha512(email.encode('utf-8')).hexdigest()
-    exist_user_email = session.query(UsedEmail).filter(UsedEmail==hashed_email).first()
+    exist_user_email = session.query(UsedEmail).filter(UsedEmail.email==hashed_email).first()
     if exist_user_email:
         return make_response(jsonify({'error': 'Email already exist', 'status': 'error'}), 400)
     
@@ -109,6 +60,59 @@ def start_register():
     session.add(temp_user)
     session.commit()
     
+    return jsonify({'status': 'OK'})
+
+
+@blueprint.route('/api/complete_registration', methods=['POST'])
+def create_user():
+    '''Confirms registration by token'''
+    if not request.json:
+        return make_response(jsonify({'error': 'Empty request', 'status': 'error'}), 400)
+    
+    elif not all(key in request.json for key in
+                 ['email', 'password', 'public_key', 'token', 'login']):
+        print(request.json)
+        return make_response(jsonify({'error': 'Bad request', 'status': 'error'}), 400)
+
+    params = request.json
+    hashed_email = sha512(params['email'].encode('utf-8')).hexdigest()
+    session = db_session.create_session()
+
+    accept = check_token(params['token'], hashed_email)
+    if not accept:
+        return make_response(jsonify({'error': 'Token error', 'status': 'error'}), 400)
+
+    login = sha512(params['login'].encode('utf-8')).hexdigest()
+    password_salt = secrets.token_hex(16)
+    password = sha512(str(params['password'] + password_salt).encode('utf-8')).hexdigest()
+    public_key = params['public_key']
+
+    exist_login = session.query(User).filter(User.login==login).first()
+    if exist_login:
+        return make_response(jsonify({'error': 'Login already exist', 'status': 'error'}), 400)
+
+    if not check_password(params['password']):
+        return make_response(jsonify({'error': 'Incorrect password', 'status': 'error'}), 400)
+
+    username = "@" + secrets.token_hex(8)
+    username_exist = session.query(User).filter(User.username==username).first()
+    start_time = time.time()
+    while True:
+        if time.time() - start_time > 5:
+            return make_response(jsonify({'error': 'Username timeout', 'status': 'error'}), 400)
+        if username_exist:
+            username = "@" + secrets.token_hex(8)
+            username_exist = session.query(User).filter(User.username==username).first()
+        else:
+            break
+    
+    temp_user = User(login=login, username=username, password=password, password_salt=password_salt, public_key=public_key)
+    session.add(temp_user)
+    
+    temp_mail = UsedEmail(email=hashed_email)
+    session.add(temp_mail)
+    
+    session.commit()
     return jsonify({'status': 'OK'})
 
 
@@ -222,3 +226,56 @@ def get_user_data():
 
     data = {'username': exist_user.username, 'public_key': exist_user.public_key}
     return jsonify({'status': 'OK', 'data': data})
+
+
+@blueprint.route('/api/send_message', methods=['POST'])
+def send_message():
+    if not request.json:
+        return make_response(jsonify({'error': 'Empty request', 'status': 'error'}), 400)
+    
+    elif not all(key in request.json for key in
+                 ['login',
+                  'password',
+                  'type',
+                  'data',
+                  'name',
+                  'signature',
+                  'chat_id',
+                  'keys']):
+        return make_response(jsonify({'error': 'Bad request', 'status': 'error'}), 400)
+    params = request.json
+    
+    session = db_session.create_session()
+
+    hashed_login = sha512(params['login'].encode('utf-8')).hexdigest()
+    exist_user = session.query(User).filter(User.login==hashed_login).first()
+    if not exist_user:
+        return make_response(jsonify({'error': 'login/password is incorrect', 'status': 'error'}), 400)
+    
+    password_salt = exist_user.password_salt
+    password = sha512(str(params['password'] + password_salt).encode('utf-8')).hexdigest()
+    if password != exist_user.password:
+        return make_response(jsonify({'error': 'login/password is incorrect', 'status': 'error'}), 400)
+
+    exist_chat = session.query(Chat).filter(Chat.chat_id==params['chat_id'])
+    if not exist_chat:
+        return make_response(jsonify({'error': 'Chat not found', 'status': 'error'}), 400)
+
+    if not params['data']:
+        return make_response(jsonify({'error': 'Empty data', 'status': 'error'}), 400)
+
+    if str(params['type']) not in ['1', '2', '3', '4']:
+        return make_response(jsonify({'error': 'Incorrect message type', 'status': 'error'}), 400)
+    
+    temp_message = Message(type=params['type'],
+                           name=params['name'],
+                           signature=params['signature'],
+                           unix_time=time.time(),
+                           chat_id=params['chat_id'],
+                           viewed=False,
+                           sended_by=exist_user.username,
+                           keys=keys)
+    session.add(temp_message)
+    session.commit()
+    return jsonify({'status': 'OK'})
+    
