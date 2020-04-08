@@ -37,3 +37,17 @@ class Chat(SqlAlchemyBase):
     user1 = sqlalchemy.Column(sqlalchemy.String, unique=False, nullable=False)
     user2 = sqlalchemy.Column(sqlalchemy.String, unique=False, nullable=False)
     chat_id = sqlalchemy.Column(sqlalchemy.String, unique=False, nullable=False)
+
+
+class Message(SqlAlchemyBase):
+    __tablename__ = 'messages'
+    id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
+    type = sqlalchemy.Column(sqlalchemy.String, unique=False, nullable=False)
+    data = sqlalchemy.Column(sqlalchemy.String, unique=False, nullable=False)
+    name = sqlalchemy.Column(sqlalchemy.String, unique=False, nullable=True)
+    signature = sqlalchemy.Column(sqlalchemy.String, unique=False, nullable=False)
+    unix_time = sqlalchemy.Column(sqlalchemy.Float, unique=False, nullable=False)
+    chat_id = sqlalchemy.Column(sqlalchemy.String, unique=False, nullable=False)
+    viewed = sqlalchemy.Column(sqlalchemy.Boolean, unique=False, nullable=False)
+    sended_by = sqlalchemy.Column(sqlalchemy.String, unique=False, nullable=False)
+    keys = sqlalchemy.Column(sqlalchemy.String, unique=False, nullable=False)

@@ -17,6 +17,8 @@ def global_init(db_file):
         raise Exception("Необходимо указать файл базы данных.")
 
     conn_str = f'sqlite:///{db_file.strip()}?check_same_thread=False'
+    #conn_str = "postgresql://rocket_user:RrYmvQUSdMN6ygr@localhost/rocket_user"
+
     print(f"Подключение к базе данных по адресу {conn_str}")
 
     engine = sa.create_engine(conn_str, echo=False)
