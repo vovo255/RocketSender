@@ -1,12 +1,13 @@
-import flask
 import time
+import json
+import flask
 import secrets
-from data import db_session
-from data.table import User, Token, UsedEmail, Chat, Message
-from flask import jsonify, request, make_response
-from tokens import generate, send, check_token
 from hashlib import sha512
+from data import db_session
 from check_password import check_password
+from tokens import generate, send, check_token
+from flask import jsonify, request, make_response
+from data.table import User, Token, UsedEmail, Chat, Message
 
 blueprint = flask.Blueprint('main_api', __name__, 
                             template_folder='api_templates')
@@ -15,6 +16,7 @@ blueprint = flask.Blueprint('main_api', __name__,
 @blueprint.route('/api/initiate_registration', methods=['POST'])
 def start_register():
     '''Initiates registration, sends a token'''
+    print(request.json)
     if not request.json:
         return make_response(jsonify({'error': 'Empty request', 'status': 'error'}), 400)
     
@@ -94,7 +96,7 @@ def create_user():
     if not check_password(params['password']):
         return make_response(jsonify({'error': 'Incorrect password', 'status': 'error'}), 400)
 
-    username = "@" + secrets.token_hex(8)
+    username = "@" + secrets.token_hex(4)
     username_exist = session.query(User).filter(User.username==username).first()
     start_time = time.time()
     while True:
@@ -124,6 +126,8 @@ def create_chat():
     
     elif not all(key in request.json for key in
                  ['login', 'password', 'user']):
+        for key in request.json:
+            print(key)
         return make_response(jsonify({'error': 'Bad request', 'status': 'error'}), 400)
     params = request.json
     
@@ -197,7 +201,19 @@ def get_user_chats():
     chats = session.query(Chat).filter(Chat.user1==exist_user.username).all()
     out = []
     for chat in chats:
-        dic = {'username': chat.user2, 'chat_id': chat.chat_id}
+        message = session.query(Message).filter(Message.chat_id==chat.chat_id).first()
+        out = []
+        keys = json.loads(message.keys)
+        key = keys[exist_user.username]
+        data = {'type': message.type,
+                'data': message.data,
+                'name': message.name,
+                'signature': message.signature,
+                'unix_time': message.unix_time,
+                'viewed': message.viewed,
+                'sended_by': message.sended_by,
+                'key': key}
+        dic = {'username': chat.user2, 'chat_id': chat.chat_id, 'last_message': data}
         out.append(dic)
     return jsonify({'status': 'OK', 'chats': out})
 
@@ -266,7 +282,13 @@ def send_message():
 
     if str(params['type']) not in ['1', '2', '3', '4']:
         return make_response(jsonify({'error': 'Incorrect message type', 'status': 'error'}), 400)
-    
+
+    try:
+        keys = json.dumps(params['keys'])
+    except Exception as e:
+        print(e)
+        return make_response(jsonify({'error': 'Json keys error', 'status': 'error'}), 400)
+
     temp_message = Message(type=params['type'],
                            name=params['name'],
                            signature=params['signature'],
@@ -274,8 +296,136 @@ def send_message():
                            chat_id=params['chat_id'],
                            viewed=False,
                            sended_by=exist_user.username,
-                           keys=keys)
+                           keys=keys,
+                           data=params['data'])
     session.add(temp_message)
     session.commit()
     return jsonify({'status': 'OK'})
+
+
+@blueprint.route('/api/get_public_key', methods=['GET'])
+def get_public_key():
+    if not request.json:
+        return make_response(jsonify({'error': 'Empty request', 'status': 'error'}), 400)
     
+    elif not all(key in request.json for key in
+                 ['login', 'password', 'username']):
+        return make_response(jsonify({'error': 'Bad request', 'status': 'error'}), 400)
+    params = request.json
+    
+    session = db_session.create_session()
+
+    hashed_login = sha512(params['login'].encode('utf-8')).hexdigest()
+    exist_user = session.query(User).filter(User.login==hashed_login).first()
+    if not exist_user:
+        return make_response(jsonify({'error': 'login/password is incorrect', 'status': 'error'}), 400)
+    
+    password_salt = exist_user.password_salt
+    password = sha512(str(params['password'] + password_salt).encode('utf-8')).hexdigest()
+    if password != exist_user.password:
+        return make_response(jsonify({'error': 'login/password is incorrect', 'status': 'error'}), 400)
+
+    temp_user = session.query(User).filter(User.username==params['username']).first()
+
+    if not temp_user:
+        return make_response(jsonify({'error': 'User not found', 'status': 'error'}), 400)
+
+    public_key = temp_user.public_key
+
+    return jsonify({'status': 'OK', 'public_key': public_key})
+
+
+@blueprint.route('/api/get_all_messages', methods=['GET'])
+def get_all_messages():
+    if not request.json:
+        return make_response(jsonify({'error': 'Empty request', 'status': 'error'}), 400)
+    
+    elif not all(key in request.json for key in
+                 ['login', 'password', 'chat_id']):
+        return make_response(jsonify({'error': 'Bad request', 'status': 'error'}), 400)
+    params = request.json
+    
+    session = db_session.create_session()
+
+    hashed_login = sha512(params['login'].encode('utf-8')).hexdigest()
+    exist_user = session.query(User).filter(User.login==hashed_login).first()
+    if not exist_user:
+        return make_response(jsonify({'error': 'login/password is incorrect', 'status': 'error'}), 400)
+    
+    password_salt = exist_user.password_salt
+    password = sha512(str(params['password'] + password_salt).encode('utf-8')).hexdigest()
+    if password != exist_user.password:
+        return make_response(jsonify({'error': 'login/password is incorrect', 'status': 'error'}), 400)    
+
+    exist_chat = session.query(Chat).filter(Chat.chat_id==params['chat_id']).first()
+    if not exist_chat:
+        return make_response(jsonify({'error': 'Chat not found', 'status': 'error'}), 400)
+
+    username = exist_user.username
+    if exist_chat.user1 != username and exist_chat.user2 != username:
+        return make_response(jsonify({'error': 'No access', 'status': 'error'}), 400)
+
+    messages = session.query(Message).filter(Message.chat_id==exist_chat.chat_id).all()
+    out = []
+    for message in messages:
+        keys = json.loads(message.keys)
+        key = keys[exist_user.username]
+        data = {'type': message.type,
+                'data': message.data,
+                'name': message.name,
+                'signature': message.signature,
+                'unix_time': message.unix_time,
+                'viewed': message.viewed,
+                'sended_by': message.sended_by,
+                'key': key}
+        out.append(data)
+        message.viewed = True
+    session.commit()
+
+    return jsonify({'status': 'OK', 'messages': out})
+
+
+@blueprint.route('/api/get_last_message', methods=['GET'])
+def get_last_message():
+    if not request.json:
+        return make_response(jsonify({'error': 'Empty request', 'status': 'error'}), 400)
+    
+    elif not all(key in request.json for key in
+                 ['login', 'password', 'chat_id']):
+        return make_response(jsonify({'error': 'Bad request', 'status': 'error'}), 400)
+    params = request.json
+    
+    session = db_session.create_session()
+
+    hashed_login = sha512(params['login'].encode('utf-8')).hexdigest()
+    exist_user = session.query(User).filter(User.login==hashed_login).first()
+    if not exist_user:
+        return make_response(jsonify({'error': 'login/password is incorrect', 'status': 'error'}), 400)
+    
+    password_salt = exist_user.password_salt
+    password = sha512(str(params['password'] + password_salt).encode('utf-8')).hexdigest()
+    if password != exist_user.password:
+        return make_response(jsonify({'error': 'login/password is incorrect', 'status': 'error'}), 400)    
+
+    exist_chat = session.query(Chat).filter(Chat.chat_id==params['chat_id'])
+    if not exist_chat:
+        return make_response(jsonify({'error': 'Chat not found', 'status': 'error'}), 400)
+
+    username = exist_user.username
+    if exist_chat.user1 != username and exist_chat.user2 != username:
+        return make_response(jsonify({'error': 'No access', 'status': 'error'}), 400)
+
+    message = session.query(Message).filter(Message.chat_id==exist_chat.chat_id).first()
+    out = []
+    keys = json.loads(message.keys)
+    key = keys[exist_user.username]
+    data = {'type': message.type,
+            'data': message.data,
+            'name': message.name,
+            'signature': message.signature,
+            'unix_time': message.unix_time,
+            'viewed': message.viewed,
+            'sended_by': message.sended_by,
+            'key': key}
+    out.append(data)
+    return jsonify({'status': 'OK', 'message': out[0]})
